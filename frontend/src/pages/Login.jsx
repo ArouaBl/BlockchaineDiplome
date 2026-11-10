@@ -1,9 +1,11 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./Login.css";
 
 function Login() {
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -11,14 +13,13 @@ function Login() {
   function handleSubmit(e) {
     e.preventDefault();
 
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       setMessage("Veuillez remplir tous les champs.");
       return;
     }
 
-    setMessage(
-      "La connexion sera activée après l'intégration du backend."
-    );
+    // Connexion provisoire en attendant le backend
+    navigate("/admin");
   }
 
   return (
@@ -61,6 +62,7 @@ function Login() {
                 placeholder="admin@universite.tn"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
 
@@ -73,6 +75,7 @@ function Login() {
                 placeholder="Entrez votre mot de passe"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
 
