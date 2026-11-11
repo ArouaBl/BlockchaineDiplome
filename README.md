@@ -84,3 +84,27 @@ Un diplôme existe si `date != 0`.
 **Format du hash :** `bytes32`, écrit en JavaScript sous la forme `0x` suivi de 64 caractères hexadécimaux (SHA-256 = 32 octets).
 
 **Messages d'erreur :** « Diplome deja existant », « Diplome inexistant », « Diplome deja revoque ».
+
+## Interface du contrat
+
+| Élément | Signature | Accès |
+|---|---|---|
+| Émettre | `emettreDiplome(bytes32 hash, string nom, string cid)` | owner uniquement |
+| Vérifier | `verifierDiplome(bytes32 hash) view returns (bool existe, bool valide, string nom, string cid, uint256 date)` | public |
+| Révoquer | `revoquerDiplome(bytes32 hash)` | owner uniquement |
+| Événement | `DiplomeEmis(bytes32 indexed hash, string nom, uint256 date)` | |
+| Événement | `DiplomeRevoque(bytes32 indexed hash)` | |
+
+### Format du hash
+
+Le hash est de type `bytes32`. Côté JavaScript, il s'écrit `0x` suivi de 64 caractères hexadécimaux (SHA-256 fait exactement 32 octets).
+
+### Paramètre `cid`
+
+`emettreDiplome` prend un troisième paramètre `cid` (lien IPFS). Sans IPFS, le front-end envoie une chaîne vide `""`.
+
+### Messages d'erreur
+
+- « Diplome deja existant »
+- « Diplome inexistant »
+- « Diplome deja revoque »
