@@ -55,3 +55,32 @@ After setting the variable, you can run the deployment with the Sepolia network:
 ```shell
 npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
 ```
+
+## Structure Diplome
+
+```solidity
+struct Diplome {
+    bytes32 hashPdf;      // empreinte SHA-256 du PDF
+    string nomEtudiant;   // nom fictif pour la démo
+    string cid;           // lien IPFS, vide si IPFS n'est pas fait
+    uint256 date;         // date d'émission (block.timestamp), 0 = n'existe pas
+    bool valide;          // true = valide, false = révoqué
+}
+mapping(bytes32 => Diplome) public diplomes;
+```
+
+Un diplôme existe si `date != 0`.
+
+## Interface du contrat
+
+| Élément | Signature | Accès |
+|---|---|---|
+| Émettre | `emettreDiplome(bytes32 hash, string nom, string cid)` | owner uniquement |
+| Vérifier | `verifierDiplome(bytes32 hash) view returns (bool existe, bool valide, string nom, string cid, uint256 date)` | public |
+| Révoquer | `revoquerDiplome(bytes32 hash)` | owner uniquement |
+| Événement | `DiplomeEmis(bytes32 indexed hash, string nom, uint256 date)` | |
+| Événement | `DiplomeRevoque(bytes32 indexed hash)` | |
+
+**Format du hash :** `bytes32`, écrit en JavaScript sous la forme `0x` suivi de 64 caractères hexadécimaux (SHA-256 = 32 octets).
+
+**Messages d'erreur :** « Diplome deja existant », « Diplome inexistant », « Diplome deja revoque ».
