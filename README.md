@@ -85,15 +85,6 @@ Un diplôme existe si `date != 0`.
 
 **Messages d'erreur :** « Diplome deja existant », « Diplome inexistant », « Diplome deja revoque ».
 
-## Interface du contrat
-
-| Élément | Signature | Accès |
-|---|---|---|
-| Émettre | `emettreDiplome(bytes32 hash, string nom, string cid)` | owner uniquement |
-| Vérifier | `verifierDiplome(bytes32 hash) view returns (bool existe, bool valide, string nom, string cid, uint256 date)` | public |
-| Révoquer | `revoquerDiplome(bytes32 hash)` | owner uniquement |
-| Événement | `DiplomeEmis(bytes32 indexed hash, string nom, uint256 date)` | |
-| Événement | `DiplomeRevoque(bytes32 indexed hash)` | |
 
 ### Format du hash
 
