@@ -1,106 +1,73 @@
-
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useWallet } from "../hooks/useWallet";
 import "./Login.css";
 
+const SEPOLIA_CHAIN_ID = 11155111;
+
 function Login() {
-  const navigate = useNavigate();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-
-  function handleSubmit(e) {
-    e.preventDefault();
-
-    if (!email.trim() || !password.trim()) {
-      setMessage("Veuillez remplir tous les champs.");
-      return;
-    }
-
-    // Connexion provisoire en attendant le backend
-    navigate("/admin");
-  }
+  const { address, network, chainId, error, hasMetaMask, connect } = useWallet();
+  const wrongNetwork = address && chainId !== SEPOLIA_CHAIN_ID;
 
   return (
     <div className="login-page">
-
       <header className="login-header">
         <Link to="/" className="logo">
-          <img
-            src="/diplomachain-logo.png"
-            alt="DiplomaChain"
-            className="logo-image"
-          />
+          <img src="/diplomachain-logo.png" alt="DiplomaChain" className="logo-image" />
           <span>DiplomaChain</span>
         </Link>
-
-        <Link to="/" className="back-home">
-          ← Retour à l'accueil
-        </Link>
+        <Link to="/" className="back-home">← Retour à l'accueil</Link>
       </header>
 
       <main className="login-container">
         <div className="login-card">
-
           <div className="login-icon">🏛️</div>
-
           <h1>Espace administrateur</h1>
-
           <p className="login-description">
-            Connectez-vous pour gérer et certifier les diplômes.
+            Connectez votre portefeuille MetaMask pour gérer et certifier les diplômes.
           </p>
 
-          <form onSubmit={handleSubmit}>
+          {!hasMetaMask && (
+            <p className="login-message">
+              MetaMask n'est pas installé.{" "}
+              <a href="https://metamask.io/download" target="_blank" rel="noopener noreferrer">
+                Installer MetaMask
+              </a>
+            </p>
+          )}
 
-            <div className="form-group">
-              <label htmlFor="email">Adresse e-mail</label>
+          {error && <p className="login-message">{error}</p>}
 
-              <input
-                id="email"
-                type="email"
-                placeholder="admin@universite.tn"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="password">Mot de passe</label>
-
-              <input
-                id="password"
-                type="password"
-                placeholder="Entrez votre mot de passe"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            {message && (
-              <p className="login-message">{message}</p>
-            )}
-
-            <button type="submit" className="login-submit">
-              Se connecter
+          {!address && (
+            <button type="button" className="login-submit" onClick={connect} disabled={!hasMetaMask}>
+              Connecter MetaMask
             </button>
+          )}
 
-          </form>
+          {address && (
+            <>
+              <p><strong>Adresse :</strong> {address}</p>
+              <p><strong>Réseau :</strong> {network} (chainId {chainId})</p>
+              {wrongNetwork && (
+                <p className="login-message">Changez de réseau dans MetaMask : choisissez Sepolia.</p>
+              )}
+              <Link
+                to="/admin"
+                className="login-submit"
+                style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+              >
+                Accéder à l'administration
+              </Link>
+            </>
+          )}
 
           <div className="login-security">
             <span>🔒</span>
             Accès réservé aux administrateurs autorisés
           </div>
-
         </div>
       </main>
 
-      <footer className="login-footer">
-        © 2026 DiplomaChain - Projet universitaire
-      </footer>
-
+      <footer className="login-footer">© 2026 DiplomaChain - Projet universitaire</footer>
     </div>
   );
 }

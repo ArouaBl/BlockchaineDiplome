@@ -1,0 +1,13 @@
+.dropzone {
+  border: 2px dashed #94a3b8;
+  border-radius: 12px;
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+}
+.dropzone.dragging {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.dropzone-error { color: #b91c1c; margin-top: 0.5rem; }
+.dropzone-hash { margin-top: 0.75rem; word-break: break-all; font-family: monospace; font-size: 0.85rem; }

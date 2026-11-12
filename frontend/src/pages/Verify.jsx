@@ -1,6 +1,6 @@
-
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import FileDropZone from "../components/FileDropZone";
 import "./Verify.css";
 
 function Verify() {
@@ -70,6 +70,11 @@ function Verify() {
               Vérifier le diplôme
             </button>
           </form>
+
+          <h3 style={{ marginTop: "1.5rem" }}>
+            Ou vérifiez le fichier PDF
+          </h3>
+          <FileDropZone />
 
           {result && (
             <div className="verify-result success">
