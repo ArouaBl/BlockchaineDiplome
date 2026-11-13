@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Verify from "./pages/Verify";
 import TestHash from "./utils/TestHash";
+import Historique from "./pages/Historique";
 import ConnexionWallet from "./components/ConnexionWallet";
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
 
         {/* Test connexion MetaMask */}
         <Route path="/wallet" element={<ConnexionWallet />} />
+        <Route path="/historique" element={<Historique />} />
       </Routes>
     </BrowserRouter>
   );
