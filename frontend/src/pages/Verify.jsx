@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import FileDropZone from "../components/FileDropZone";
@@ -21,9 +20,7 @@ function Verify() {
       setResult(resultat);
     } catch (err) {
       console.error("Erreur de vérification :", err);
-      setError(
-        err.message || "Impossible de lire la blockchain. Réessayez."
-      );
+      setError(err.message || "Impossible de lire la blockchain. Réessayez.");
     } finally {
       setLoading(false);
     }
@@ -65,22 +62,18 @@ function Verify() {
         <div className="verify-card">
           <div className="verify-icon">🎓</div>
 
-          <p className="verify-label">
-            VÉRIFICATION OFFICIELLE
-          </p>
+          <p className="verify-label">VÉRIFICATION OFFICIELLE</p>
 
           <h1>Vérifier un diplôme</h1>
 
           <p className="verify-description">
-            Déposez le PDF du diplôme : son empreinte est comparée
-            à celle enregistrée sur la blockchain.
+            Déposez le PDF du diplôme : son empreinte est comparée à celle
+            enregistrée sur la blockchain.
           </p>
 
           <FileDropZone onHash={handleFile} />
 
-          {loading && (
-            <p>Vérification sur la blockchain…</p>
-          )}
+          {loading && <p>Vérification sur la blockchain…</p>}
 
           {error && (
             <div className="verify-result error">
@@ -88,10 +81,7 @@ function Verify() {
             </div>
           )}
 
-          <ResultatVerification
-            statut={statut}
-            diplome={diplome}
-          />
+          <ResultatVerification statut={statut} diplome={diplome} />
         </div>
       </main>
 

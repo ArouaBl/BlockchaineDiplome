@@ -1,4 +1,3 @@
-
 function ResultatVerification({ statut, diplome }) {
   if (!statut) return null;
 
@@ -28,7 +27,14 @@ function ResultatVerification({ statut, diplome }) {
 
             {diplome.cid && (
               <p>
-                <strong>CID :</strong> {diplome.cid}
+                <strong>PDF :</strong>{" "}
+                <a
+                  href={`https://ipfs.io/ipfs/${diplome.cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Voir le PDF du diplôme (IPFS)
+                </a>
               </p>
             )}
           </>

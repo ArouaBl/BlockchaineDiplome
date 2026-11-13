@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { BrowserProvider } from "ethers";
 import { Link } from "react-router-dom";
 import { calculerHash } from "../utils/hashUtils";
-
+import { uploadToIpfs } from "../utils/ipfs";
 import {
   connecterWallet,
   verifierReseauSepolia,
@@ -393,12 +393,14 @@ function Admin() {
         );
       }
 
+      afficherMessage("Envoi du PDF sur IPFS...", "info");
+
+      const cid = await uploadToIpfs(pdfFile);
+
       afficherMessage(
         "Veuillez confirmer la transaction dans MetaMask...",
         "info"
       );
-
-      const cid = "";
 
       const transaction = await contrat.emettreDiplome(
         pdfHash,
@@ -422,6 +424,7 @@ function Admin() {
         ...cleanedData,
         pdfHash,
         pdfName: pdfFile.name,
+        cid,
         revoked: false,
         blockchainTxHash: transaction.hash,
         blockchainAddress: CONTRACT_ADDRESS,
