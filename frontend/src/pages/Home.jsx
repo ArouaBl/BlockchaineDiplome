@@ -10,7 +10,7 @@ function Home() {
       <header className="navbar">
         <Link to="/" className="logo">
           <img
-            src="C:\Users\Blidi\Desktop\Blockchaine\BlockchaineDiplome\frontend\src\assets\diplome-logo.png"
+            src="frontend\src\assets\diplome-logo.png"
             alt="DiplomaChain"
             className="logo-image"
           />

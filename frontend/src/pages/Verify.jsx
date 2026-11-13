@@ -2,63 +2,51 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import FileDropZone from "../components/FileDropZone";
+import { verifierDiplome } from "../utils/contract";
 import ResultatVerification from "../components/ResultatVerification";
 import "./Verify.css";
 
 function Verify() {
-  const [diplomaNumber, setDiplomaNumber] = useState("");
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Vérification par numéro
-  function handleVerify(e) {
-    e.preventDefault();
+  async function handleFile(hash, file) {
+    setResult(null);
+    setError("");
+    setLoading(true);
 
-    const diplomas = JSON.parse(
-      localStorage.getItem("diplomas") || "[]"
-    );
-
-    const foundDiploma = diplomas.find(
-      (diploma) =>
-        diploma.diplomaNumber?.toLowerCase() ===
-        diplomaNumber.trim().toLowerCase()
-    );
-
-    afficherResultat(foundDiploma);
-  }
-
-  // Vérification par hash du PDF
-  function handleHash(hash) {
-    const diplomas = JSON.parse(
-      localStorage.getItem("diplomas") || "[]"
-    );
-
-    const foundDiploma = diplomas.find(
-      (diploma) =>
-        diploma.pdfHash?.toLowerCase() === hash.toLowerCase()
-    );
-
-    afficherResultat(foundDiploma);
-  }
-
-  // Afficher le résultat
-  function afficherResultat(diploma) {
-    if (!diploma) {
-      setResult({
-        statut: "introuvable",
-        diplome: null,
-      });
-    } else if (diploma.revoked) {
-      setResult({
-        statut: "revoque",
-        diplome: diploma,
-      });
-    } else {
-      setResult({
-        statut: "valide",
-        diplome: diploma,
-      });
+    try {
+      const resultat = await verifierDiplome(file);
+      setResult(resultat);
+    } catch (err) {
+      console.error("Erreur de vérification :", err);
+      setError(
+        err.message || "Impossible de lire la blockchain. Réessayez."
+      );
+    } finally {
+      setLoading(false);
     }
   }
+
+  const statut = !result
+    ? null
+    : !result.existe
+    ? "introuvable"
+    : result.valide
+    ? "valide"
+    : "revoque";
+
+  const diplome =
+    result && result.existe
+      ? {
+          studentName: result.nom,
+          issueDate: result.date
+            ? new Date(result.date * 1000).toLocaleDateString("fr-FR")
+            : "Date indisponible",
+          cid: result.cid,
+        }
+      : null;
 
   return (
     <div className="verify-page">
@@ -84,48 +72,25 @@ function Verify() {
           <h1>Vérifier un diplôme</h1>
 
           <p className="verify-description">
-            Vérifiez l'authenticité d'un diplôme par son numéro
-            ou en déposant son fichier PDF.
+            Déposez le PDF du diplôme : son empreinte est comparée
+            à celle enregistrée sur la blockchain.
           </p>
 
-          {/* Vérification par numéro */}
-          <form onSubmit={handleVerify}>
-            <label htmlFor="diplomaNumber">
-              Numéro du diplôme
-            </label>
+          <FileDropZone onHash={handleFile} />
 
-            <input
-              id="diplomaNumber"
-              type="text"
-              placeholder="Ex : DIP-2026-001"
-              value={diplomaNumber}
-              onChange={(e) => {
-                setDiplomaNumber(e.target.value);
-                setResult(null);
-              }}
-              required
-            />
+          {loading && (
+            <p>Vérification sur la blockchain…</p>
+          )}
 
-            <button type="submit">
-              Vérifier le diplôme
-            </button>
-          </form>
+          {error && (
+            <div className="verify-result error">
+              <p>{error}</p>
+            </div>
+          )}
 
           <ResultatVerification
-            statut={result?.statut}
-            diplome={result?.diplome}
-          />
-
-          <h3 style={{ marginTop: "1.5rem" }}>
-            Ou vérifiez avec le fichier PDF
-          </h3>
-
-          {/* Vérification par PDF */}
-          <FileDropZone
-            onHash={(hash) => {
-              setResult(null);
-              handleHash(hash);
-            }}
+            statut={statut}
+            diplome={diplome}
           />
         </div>
       </main>
