@@ -1,16 +1,15 @@
 
 import { Link } from "react-router-dom";
 import "./Home.css";
+import logo from "../assets/diplome-logo.png";
 
 function Home() {
   return (
     <div className="home-page">
-
-      {/* NAVIGATION */}
       <header className="navbar">
         <Link to="/" className="logo">
           <img
-            src="frontend\src\assets\diplome-logo.png"
+            src={logo}
             alt="DiplomaChain"
             className="logo-image"
           />
@@ -29,7 +28,6 @@ function Home() {
       </header>
 
       <main>
-        {/* SECTION PRINCIPALE */}
         <section className="hero" id="accueil">
           <div className="hero-content">
             <span className="hero-label">
@@ -64,13 +62,10 @@ function Home() {
             </div>
           </div>
 
-          {/* APERÇU D'UN DIPLÔME */}
           <div className="hero-card">
             <div className="document-icon">🎓</div>
-
             <h3>Diplôme certifié</h3>
             <p>Licence en informatique</p>
-
             <div className="certificate-line"></div>
 
             <div className="certificate-details">
@@ -89,7 +84,6 @@ function Home() {
           </div>
         </section>
 
-        {/* AVANTAGES */}
         <section className="advantages section" id="avantages">
           <div className="section-heading">
             <span>POURQUOI DIPLOMCHAIN ?</span>
@@ -130,7 +124,6 @@ function Home() {
           </div>
         </section>
 
-        {/* FONCTIONNEMENT */}
         <section className="how-section section" id="fonctionnement">
           <div className="section-heading">
             <span>COMMENT ÇA MARCHE ?</span>
@@ -170,7 +163,6 @@ function Home() {
             </article>
           </div>
 
-          {/* DEUX ACCÈS */}
           <div className="access-section">
             <h2>Que souhaitez-vous faire ?</h2>
             <p>Choisissez l'espace correspondant à votre besoin.</p>
@@ -204,14 +196,11 @@ function Home() {
           </div>
         </section>
 
-        {/* PIED DE PAGE */}
         <footer className="footer">
           <div className="footer-logo">DiplomaChain</div>
-
           <p>
             Une solution de certification des diplômes basée sur la blockchain.
           </p>
-
           <span>© 2026 DiplomaChain - Projet universitaire</span>
         </footer>
       </main>

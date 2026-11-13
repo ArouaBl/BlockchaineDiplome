@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { BrowserProvider } from "ethers";
 import { Link } from "react-router-dom";
 import { calculerHash } from "../utils/hashUtils";
 
@@ -15,9 +16,6 @@ import {
 } from "../blockchain/contract.js";
 
 import "./Admin.css";
-
-const OWNER_ADDRESS =
-  "0xbeCAE85a2260C29625D4d382051CB1DD143B0191";
 
 function Admin() {
   const [diplomas, setDiplomas] = useState(() => {
@@ -46,13 +44,149 @@ function Admin() {
   const [loadingHash, setLoadingHash] = useState(false);
   const [loadingTransaction, setLoadingTransaction] = useState(false);
 
-  // Afficher un message
+  // États de vérification du propriétaire
+  const [isOwner, setIsOwner] = useState(false);
+  const [ownerAddress, setOwnerAddress] = useState("");
+  const [connectedAddress, setConnectedAddress] = useState("");
+  const [checkingOwner, setCheckingOwner] = useState(true);
+
   function afficherMessage(texte, type = "info") {
     setMessage(texte);
     setMessageType(type);
   }
 
-  // Sauvegarder les diplômes dans localStorage
+  // Vérifier automatiquement le propriétaire du contrat
+  useEffect(() => {
+    let actif = true;
+
+    async function verifierProprietaire() {
+      if (!window.ethereum) {
+        if (actif) {
+          setIsOwner(false);
+          setCheckingOwner(false);
+          setConnectedAddress("");
+          afficherMessage(
+            "MetaMask n'est pas installé. Accès administrateur indisponible.",
+            "warning"
+          );
+        }
+        return;
+      }
+
+      try {
+        if (actif) {
+          setCheckingOwner(true);
+          setIsOwner(false);
+        }
+
+        // Lire les comptes déjà connectés sans ouvrir MetaMask
+        const accounts = await window.ethereum.request({
+          method: "eth_accounts",
+        });
+
+        if (!actif) return;
+
+        if (!accounts || accounts.length === 0) {
+          setIsOwner(false);
+          setConnectedAddress("");
+          setOwnerAddress("");
+          afficherMessage(
+            "Veuillez connecter MetaMask pour vérifier vos autorisations.",
+            "warning"
+          );
+          return;
+        }
+
+        const provider = new BrowserProvider(window.ethereum);
+
+        // Vérifier le réseau
+        const network = await provider.getNetwork();
+
+        if (network.chainId !== 11155111n) {
+          setIsOwner(false);
+          setConnectedAddress(accounts[0]);
+          setOwnerAddress("");
+          afficherMessage(
+            "Veuillez sélectionner le réseau Ethereum Sepolia dans MetaMask.",
+            "warning"
+          );
+          return;
+        }
+
+        // Lire le véritable propriétaire depuis la blockchain
+        const contrat = obtenirContrat(provider);
+        const owner = await contrat.owner();
+
+        if (!actif) return;
+
+        const adresseConnectee = accounts[0];
+
+        setConnectedAddress(adresseConnectee);
+        setOwnerAddress(owner);
+
+        // Comparaison des adresses
+        const proprietaire =
+          adresseConnectee.toLowerCase() === owner.toLowerCase();
+
+        setIsOwner(proprietaire);
+
+        if (proprietaire) {
+          afficherMessage(
+            "Compte propriétaire vérifié. Toutes les actions administrateur sont autorisées.",
+            "success"
+          );
+        } else {
+          afficherMessage(
+            "Accès en lecture seule : ce compte MetaMask n'est pas propriétaire du Smart Contract.",
+            "warning"
+          );
+        }
+      } catch (error) {
+        console.error("Erreur de vérification du propriétaire :", error);
+
+        if (actif) {
+          setIsOwner(false);
+          afficherMessage(
+            "Impossible de vérifier le propriétaire du Smart Contract.",
+            "error"
+          );
+        }
+      } finally {
+        if (actif) {
+          setCheckingOwner(false);
+        }
+      }
+    }
+
+    verifierProprietaire();
+
+    // Vérifier à nouveau si le compte MetaMask change
+    function handleAccountsChanged() {
+      verifierProprietaire();
+    }
+
+    // Vérifier à nouveau si le réseau change
+    function handleChainChanged() {
+      verifierProprietaire();
+    }
+
+    window.ethereum?.on("accountsChanged", handleAccountsChanged);
+    window.ethereum?.on("chainChanged", handleChainChanged);
+
+    return () => {
+      actif = false;
+      window.ethereum?.removeListener(
+        "accountsChanged",
+        handleAccountsChanged
+      );
+      window.ethereum?.removeListener(
+        "chainChanged",
+        handleChainChanged
+      );
+    };
+  }, []);
+
+  // Sauvegarder les diplômes localement
   useEffect(() => {
     localStorage.setItem("diplomas", JSON.stringify(diplomas));
   }, [diplomas]);
@@ -65,33 +199,38 @@ function Admin() {
     }));
   }
 
-  // Vérifier le compte propriétaire et préparer le contrat
+  // Vérification supplémentaire avant chaque transaction
   async function connecterProprietaire() {
-    const { signer, provider, adresse } = await connecterWallet();
+    const { signer, provider } = await connecterWallet();
 
     await verifierReseauSepolia(provider);
 
+    const adresse = await signer.getAddress();
     const contrat = obtenirContrat(signer);
     const owner = await contrat.owner();
 
-    if (owner.toLowerCase() !== OWNER_ADDRESS.toLowerCase()) {
+    if (adresse.toLowerCase() !== owner.toLowerCase()) {
+      setIsOwner(false);
+
       throw new Error(
-        "Le propriétaire du Smart Contract ne correspond pas à l'adresse attendue."
+        "Accès refusé : le compte MetaMask connecté n'est pas propriétaire du Smart Contract."
       );
     }
 
-    if (adresse.toLowerCase() !== owner.toLowerCase()) {
-      throw new Error(
-        "Veuillez sélectionner le compte MetaMask propriétaire du Smart Contract : " +
-          owner
-      );
-    }
+    setOwnerAddress(owner);
+    setConnectedAddress(adresse);
+    setIsOwner(true);
 
     return { contrat, signer };
   }
 
   // Sélectionner un PDF et calculer son hash
   async function handleFileChange(e) {
+    if (!isOwner) {
+      afficherMessage("Accès refusé : compte non propriétaire.", "error");
+      return;
+    }
+
     const file = e.target.files[0];
 
     if (!file) return;
@@ -105,7 +244,6 @@ function Admin() {
 
     try {
       setLoadingHash(true);
-
       afficherMessage("Calcul du hash SHA-256 en cours...", "info");
 
       const hash = await calculerHash(file);
@@ -120,10 +258,7 @@ function Admin() {
     } catch (error) {
       console.error(error);
 
-      afficherMessage(
-        "Erreur lors du calcul du hash du PDF.",
-        "error"
-      );
+      afficherMessage("Erreur lors du calcul du hash du PDF.", "error");
 
       setPdfFile(null);
       setPdfHash("");
@@ -153,6 +288,11 @@ function Admin() {
   async function handleSubmit(e) {
     e.preventDefault();
 
+    if (!isOwner) {
+      afficherMessage("Accès refusé : compte non propriétaire.", "error");
+      return;
+    }
+
     if (loadingHash || loadingTransaction) {
       afficherMessage(
         "Veuillez attendre la fin de l'opération.",
@@ -169,7 +309,6 @@ function Admin() {
       institution: formData.institution.trim(),
     };
 
-    // Vérifier les champs
     if (
       !cleanedData.studentName ||
       !cleanedData.diplomaNumber ||
@@ -184,7 +323,6 @@ function Admin() {
       return;
     }
 
-    // Vérifier les doublons
     const duplicate = diplomas.some(
       (d) =>
         d.diplomaNumber?.toLowerCase() ===
@@ -193,18 +331,13 @@ function Admin() {
     );
 
     if (duplicate) {
-      afficherMessage(
-        "Ce numéro de diplôme existe déjà.",
-        "error"
-      );
+      afficherMessage("Ce numéro de diplôme existe déjà.", "error");
       return;
     }
 
     // Modification locale
     if (editingId !== null) {
-      const oldDiploma = diplomas.find(
-        (d) => d.id === editingId
-      );
+      const oldDiploma = diplomas.find((d) => d.id === editingId);
 
       if (!oldDiploma) {
         afficherMessage("Diplôme introuvable.", "error");
@@ -221,12 +354,7 @@ function Admin() {
 
       setDiplomas((previous) =>
         previous.map((d) =>
-          d.id === editingId
-            ? {
-                ...d,
-                ...cleanedData,
-              }
-            : d
+          d.id === editingId ? { ...d, ...cleanedData } : d
         )
       );
 
@@ -239,7 +367,6 @@ function Admin() {
       return;
     }
 
-    // PDF obligatoire pour un nouvel ajout
     if (!pdfFile || !pdfHash) {
       afficherMessage(
         "Veuillez sélectionner le fichier PDF du diplôme.",
@@ -258,7 +385,6 @@ function Admin() {
 
       const { contrat } = await connecterProprietaire();
 
-      // Vérifier si le hash existe déjà
       const verification = await contrat.verifierDiplome(pdfHash);
 
       if (verification.existe) {
@@ -274,7 +400,6 @@ function Admin() {
 
       const cid = "";
 
-      // Envoyer la transaction
       const transaction = await contrat.emettreDiplome(
         pdfHash,
         cleanedData.studentName,
@@ -286,16 +411,12 @@ function Admin() {
         "info"
       );
 
-      // Attendre la confirmation
       const receipt = await transaction.wait();
 
       if (!receipt || receipt.status !== 1) {
-        throw new Error(
-          "La transaction blockchain a échoué."
-        );
+        throw new Error("La transaction blockchain a échoué.");
       }
 
-      // Enregistrer les informations localement
       const newDiploma = {
         id: Date.now(),
         ...cleanedData,
@@ -306,10 +427,7 @@ function Admin() {
         blockchainAddress: CONTRACT_ADDRESS,
       };
 
-      setDiplomas((previous) => [
-        ...previous,
-        newDiploma,
-      ]);
+      setDiplomas((previous) => [...previous, newDiploma]);
 
       afficherMessage(
         "Diplôme enregistré avec succès sur Ethereum Sepolia !",
@@ -342,6 +460,11 @@ function Admin() {
 
   // Modifier un diplôme
   function handleEdit(diploma) {
+    if (!isOwner) {
+      afficherMessage("Accès refusé : compte non propriétaire.", "error");
+      return;
+    }
+
     if (diploma.revoked) {
       afficherMessage(
         "Un diplôme révoqué ne peut pas être modifié.",
@@ -366,14 +489,16 @@ function Admin() {
     setMessage("");
     setMessageType("info");
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   // Supprimer de la liste locale
   function handleDelete(id) {
+    if (!isOwner) {
+      afficherMessage("Accès refusé : compte non propriétaire.", "error");
+      return;
+    }
+
     const confirmed = window.confirm(
       "Voulez-vous vraiment supprimer ce diplôme de la liste locale ? Attention : cette action ne supprime pas son enregistrement sur la blockchain."
     );
@@ -383,9 +508,7 @@ function Admin() {
       return;
     }
 
-    setDiplomas((previous) =>
-      previous.filter((d) => d.id !== id)
-    );
+    setDiplomas((previous) => previous.filter((d) => d.id !== id));
 
     if (editingId === id) {
       resetForm();
@@ -399,15 +522,17 @@ function Admin() {
 
   // Révoquer un diplôme sur la blockchain
   async function handleRevoke(id) {
+    if (!isOwner) {
+      afficherMessage("Accès refusé : compte non propriétaire.", "error");
+      return;
+    }
+
     const diploma = diplomas.find((d) => d.id === id);
 
     if (!diploma || diploma.revoked) return;
 
     if (!diploma.pdfHash) {
-      afficherMessage(
-        "Ce diplôme ne possède pas de hash.",
-        "error"
-      );
+      afficherMessage("Ce diplôme ne possède pas de hash.", "error");
       return;
     }
 
@@ -463,9 +588,7 @@ function Admin() {
       const receipt = await transaction.wait();
 
       if (!receipt || receipt.status !== 1) {
-        throw new Error(
-          "La transaction de révocation a échoué."
-        );
+        throw new Error("La transaction de révocation a échoué.");
       }
 
       setDiplomas((previous) =>
@@ -506,22 +629,14 @@ function Admin() {
     }
   }
 
-  const validDiplomas = diplomas.filter(
-    (d) => !d.revoked
-  ).length;
-
-  const revokedDiplomas = diplomas.filter(
-    (d) => d.revoked
-  ).length;
+  const validDiplomas = diplomas.filter((d) => !d.revoked).length;
+  const revokedDiplomas = diplomas.filter((d) => d.revoked).length;
 
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
         <Link to="/" className="sidebar-brand">
-          <img
-            src="/diplomachain-logo.png"
-            alt="DiplomaChain"
-          />
+          <img src="/diplomachain-logo.png" alt="DiplomaChain" />
           <span>DiplomaChain</span>
         </Link>
 
@@ -544,17 +659,19 @@ function Admin() {
           <span>▦</span> Tableau de bord
         </button>
 
-        <button
-          className={`sidebar-link ${
-            activeSection === "add" ? "active" : ""
-          }`}
-          onClick={() => {
-            resetForm();
-            setActiveSection("add");
-          }}
-        >
-          <span>＋</span> Ajouter un diplôme
-        </button>
+        {isOwner && (
+          <button
+            className={`sidebar-link ${
+              activeSection === "add" ? "active" : ""
+            }`}
+            onClick={() => {
+              resetForm();
+              setActiveSection("add");
+            }}
+          >
+            <span>＋</span> Ajouter un diplôme
+          </button>
+        )}
 
         <button
           className={`sidebar-link ${
@@ -596,6 +713,44 @@ function Admin() {
           </Link>
         </header>
 
+        {/* STATUT DU COMPTE */}
+        <section className="dashboard-panel">
+          <h3>Vérification du propriétaire du Smart Contract</h3>
+
+          {checkingOwner ? (
+            <p>Vérification du compte MetaMask en cours...</p>
+          ) : (
+            <>
+              <p>
+                <strong>Compte connecté :</strong>{" "}
+                {connectedAddress || "Aucun compte connecté"}
+              </p>
+
+              <p>
+                <strong>Propriétaire du contrat :</strong>{" "}
+                {ownerAddress || "Non disponible"}
+              </p>
+
+              <p>
+                <strong>Autorisation :</strong>{" "}
+                {isOwner ? (
+                  <span className="valid-status">Propriétaire vérifié</span>
+                ) : (
+                  <span className="revoked-status">Accès en lecture seule</span>
+                )}
+              </p>
+            </>
+          )}
+        </section>
+
+        {/* MESSAGE D'ACCÈS */}
+        {!checkingOwner && !isOwner && (
+          <div className="admin-message warning">
+            Accès en lecture seule : vous n'êtes pas le propriétaire du
+            Smart Contract. Les actions administrateur sont désactivées.
+          </div>
+        )}
+
         {/* TABLEAU DE BORD */}
         {activeSection === "dashboard" && (
           <>
@@ -604,8 +759,8 @@ function Admin() {
                 <span>ESPACE ADMINISTRATEUR</span>
                 <h2>Bienvenue sur DiplomaChain</h2>
                 <p>
-                  Gérez les diplômes et consultez les
-                  enregistrements de votre établissement.
+                  Gérez les diplômes et consultez les enregistrements
+                  de votre établissement.
                 </p>
               </div>
 
@@ -660,16 +815,16 @@ function Admin() {
                 <div className="empty-state">
                   <div>📄</div>
                   <h3>Aucun diplôme pour le moment</h3>
-                  <p>
-                    Commencez par ajouter votre premier diplôme.
-                  </p>
+                  <p>Commencez par ajouter votre premier diplôme.</p>
 
-                  <button
-                    className="primary-button"
-                    onClick={() => setActiveSection("add")}
-                  >
-                    + Ajouter un diplôme
-                  </button>
+                  {isOwner && (
+                    <button
+                      className="primary-button"
+                      onClick={() => setActiveSection("add")}
+                    >
+                      + Ajouter un diplôme
+                    </button>
+                  )}
                 </div>
               ) : (
                 <DiplomaTable
@@ -677,7 +832,8 @@ function Admin() {
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onRevoke={handleRevoke}
-                  disabled={loadingTransaction}
+                  disabled={loadingTransaction || !isOwner}
+                  isOwner={isOwner}
                 />
               )}
             </section>
@@ -685,7 +841,7 @@ function Admin() {
         )}
 
         {/* FORMULAIRE */}
-        {activeSection === "add" && (
+        {activeSection === "add" && isOwner && (
           <section className="dashboard-panel form-panel">
             <div className="panel-heading">
               <div>
@@ -756,7 +912,6 @@ function Admin() {
                 />
               </div>
 
-              {/* PDF */}
               <div className="form-group full-width">
                 <label>Fichier PDF du diplôme *</label>
                 <input
@@ -766,9 +921,7 @@ function Admin() {
                   disabled={editingId !== null || loadingTransaction}
                 />
 
-                {pdfFile && (
-                  <p>📄 Fichier sélectionné : {pdfFile.name}</p>
-                )}
+                {pdfFile && <p>📄 Fichier sélectionné : {pdfFile.name}</p>}
 
                 {editingId !== null && (
                   <p>
@@ -827,6 +980,17 @@ function Admin() {
           </section>
         )}
 
+        {/* ACCÈS REFUSÉ AU FORMULAIRE */}
+        {activeSection === "add" && !isOwner && (
+          <section className="dashboard-panel">
+            <h2>Accès administrateur refusé</h2>
+            <p>
+              Seul le propriétaire du Smart Contract peut ajouter ou
+              modifier des diplômes.
+            </p>
+          </section>
+        )}
+
         {/* LISTE DES DIPLÔMES */}
         {activeSection === "list" && (
           <section className="dashboard-panel">
@@ -836,15 +1000,17 @@ function Admin() {
                 <p>{diplomas.length} diplôme(s) enregistré(s)</p>
               </div>
 
-              <button
-                className="primary-button"
-                onClick={() => {
-                  resetForm();
-                  setActiveSection("add");
-                }}
-              >
-                + Ajouter
-              </button>
+              {isOwner && (
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    resetForm();
+                    setActiveSection("add");
+                  }}
+                >
+                  + Ajouter
+                </button>
+              )}
             </div>
 
             {diplomas.length === 0 ? (
@@ -859,7 +1025,8 @@ function Admin() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onRevoke={handleRevoke}
-                disabled={loadingTransaction}
+                disabled={loadingTransaction || !isOwner}
+                isOwner={isOwner}
               />
             )}
           </section>
@@ -882,6 +1049,7 @@ function DiplomaTable({
   onDelete,
   onRevoke,
   disabled,
+  isOwner,
 }) {
   return (
     <div className="table-wrapper">
@@ -901,9 +1069,7 @@ function DiplomaTable({
         <tbody>
           {diplomas.map((diploma) => (
             <tr key={diploma.id}>
-              <td className="student-cell">
-                {diploma.studentName}
-              </td>
+              <td className="student-cell">{diploma.studentName}</td>
 
               <td>
                 <span className="diploma-number">
@@ -917,19 +1083,15 @@ function DiplomaTable({
 
               <td>
                 {diploma.revoked ? (
-                  <span className="revoked-status">
-                    Révoqué
-                  </span>
+                  <span className="revoked-status">Révoqué</span>
                 ) : (
-                  <span className="valid-status">
-                    Valide
-                  </span>
+                  <span className="valid-status">Valide</span>
                 )}
               </td>
 
               <td>
                 <div className="table-actions">
-                  {!diploma.revoked && (
+                  {isOwner && !diploma.revoked && (
                     <>
                       <button
                         className="edit-button"
@@ -951,14 +1113,20 @@ function DiplomaTable({
                     </>
                   )}
 
-                  <button
-                    className="delete-button"
-                    onClick={() => onDelete(diploma.id)}
-                    title="Supprimer de la liste locale"
-                    disabled={disabled}
-                  >
-                    ×
-                  </button>
+                  {isOwner && (
+                    <button
+                      className="delete-button"
+                      onClick={() => onDelete(diploma.id)}
+                      title="Supprimer de la liste locale"
+                      disabled={disabled}
+                    >
+                      ×
+                    </button>
+                  )}
+
+                  {!isOwner && (
+                    <span>Consultation seule</span>
+                  )}
                 </div>
               </td>
             </tr>
