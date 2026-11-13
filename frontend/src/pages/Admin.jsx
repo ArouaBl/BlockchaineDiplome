@@ -6,6 +6,7 @@ import { calculerHash } from "../utils/hashUtils";
 import {
   connecterWallet,
   verifierReseauSepolia,
+  estRejetMetaMask,
 } from "../blockchain/wallet.js";
 
 import {
@@ -71,7 +72,6 @@ function Admin() {
     await verifierReseauSepolia(provider);
 
     const contrat = obtenirContrat(signer);
-
     const owner = await contrat.owner();
 
     if (owner.toLowerCase() !== OWNER_ADDRESS.toLowerCase()) {
@@ -200,8 +200,7 @@ function Admin() {
       return;
     }
 
-    // MODIFICATION : les informations locales changent,
-    // mais le hash déjà enregistré sur la blockchain reste identique.
+    // Modification locale
     if (editingId !== null) {
       const oldDiploma = diplomas.find(
         (d) => d.id === editingId
@@ -240,7 +239,7 @@ function Admin() {
       return;
     }
 
-    // NOUVEL AJOUT : PDF obligatoire
+    // PDF obligatoire pour un nouvel ajout
     if (!pdfFile || !pdfHash) {
       afficherMessage(
         "Veuillez sélectionner le fichier PDF du diplôme.",
@@ -259,7 +258,7 @@ function Admin() {
 
       const { contrat } = await connecterProprietaire();
 
-      // Vérifier si le hash existe déjà sur la blockchain
+      // Vérifier si le hash existe déjà
       const verification = await contrat.verifierDiplome(pdfHash);
 
       if (verification.existe) {
@@ -273,10 +272,9 @@ function Admin() {
         "info"
       );
 
-      // Le CID est vide pour le moment : IPFS n'est pas encore intégré.
       const cid = "";
 
-      // Enregistrer le diplôme sur la blockchain
+      // Envoyer la transaction
       const transaction = await contrat.emettreDiplome(
         pdfHash,
         cleanedData.studentName,
@@ -288,6 +286,7 @@ function Admin() {
         "info"
       );
 
+      // Attendre la confirmation
       const receipt = await transaction.wait();
 
       if (!receipt || receipt.status !== 1) {
@@ -296,7 +295,7 @@ function Admin() {
         );
       }
 
-      // Enregistrer aussi les informations complémentaires localement
+      // Enregistrer les informations localement
       const newDiploma = {
         id: Date.now(),
         ...cleanedData,
@@ -318,18 +317,24 @@ function Admin() {
       );
 
       resetForm();
-
       setActiveSection("list");
     } catch (error) {
       console.error("Erreur d'enregistrement :", error);
 
-      afficherMessage(
-        error.reason ||
-          error.shortMessage ||
-          error.message ||
-          "Une erreur est survenue pendant l'enregistrement.",
-        "error"
-      );
+      if (estRejetMetaMask(error)) {
+        afficherMessage(
+          "Transaction rejetée dans MetaMask. Aucun diplôme n'a été enregistré.",
+          "warning"
+        );
+      } else {
+        afficherMessage(
+          error.reason ||
+            error.shortMessage ||
+            error.message ||
+            "Une erreur est survenue pendant l'enregistrement.",
+          "error"
+        );
+      }
     } finally {
       setLoadingTransaction(false);
     }
@@ -482,13 +487,20 @@ function Admin() {
     } catch (error) {
       console.error("Erreur de révocation :", error);
 
-      afficherMessage(
-        error.reason ||
-          error.shortMessage ||
-          error.message ||
-          "Erreur pendant la révocation.",
-        "error"
-      );
+      if (estRejetMetaMask(error)) {
+        afficherMessage(
+          "Révocation rejetée dans MetaMask. Le diplôme reste inchangé.",
+          "warning"
+        );
+      } else {
+        afficherMessage(
+          error.reason ||
+            error.shortMessage ||
+            error.message ||
+            "Erreur pendant la révocation.",
+          "error"
+        );
+      }
     } finally {
       setLoadingTransaction(false);
     }

@@ -1,6 +1,17 @@
 
 import { BrowserProvider } from "ethers";
 
+// Vérifier si l'utilisateur a refusé une action dans MetaMask
+export function estRejetMetaMask(error) {
+  return (
+    error?.code === 4001 ||
+    error?.code === "4001" ||
+    error?.code === "ACTION_REJECTED" ||
+    error?.info?.error?.code === 4001 ||
+    error?.error?.code === 4001
+  );
+}
+
 // Connecter MetaMask
 export async function connecterWallet() {
   if (!window.ethereum) {
@@ -26,7 +37,9 @@ export async function verifierReseauSepolia(provider) {
   const network = await provider.getNetwork();
 
   if (network.chainId !== 11155111n) {
-    throw new Error("Veuillez sélectionner le réseau Sepolia dans MetaMask.");
+    throw new Error(
+      "Veuillez sélectionner le réseau Sepolia dans MetaMask."
+    );
   }
 
   return true;
