@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Verify from "./pages/Verify";
 import TestHash from "./utils/TestHash";
+import ConnexionWallet from "./components/ConnexionWallet";
 
 function App() {
   return (
@@ -16,8 +17,11 @@ function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/verify" element={<Verify />} />
 
-        {/* Route temporaire pour tester SHA-256 */}
+        {/* Test SHA-256 */}
         <Route path="/test-hash" element={<TestHash />} />
+
+        {/* Test connexion MetaMask */}
+        <Route path="/wallet" element={<ConnexionWallet />} />
       </Routes>
     </BrowserRouter>
   );

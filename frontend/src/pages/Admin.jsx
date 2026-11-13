@@ -2,11 +2,29 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { calculerHash } from "../utils/hashUtils";
+
+import {
+  connecterWallet,
+  verifierReseauSepolia,
+} from "../blockchain/wallet.js";
+
+import {
+  obtenirContrat,
+  CONTRACT_ADDRESS,
+} from "../blockchain/contract.js";
+
 import "./Admin.css";
+
+const OWNER_ADDRESS =
+  "0xbeCAE85a2260C29625D4d382051CB1DD143B0191";
 
 function Admin() {
   const [diplomas, setDiplomas] = useState(() => {
-    return JSON.parse(localStorage.getItem("diplomas") || "[]");
+    try {
+      return JSON.parse(localStorage.getItem("diplomas") || "[]");
+    } catch {
+      return [];
+    }
   });
 
   const [formData, setFormData] = useState({
@@ -25,24 +43,51 @@ function Admin() {
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfHash, setPdfHash] = useState("");
   const [loadingHash, setLoadingHash] = useState(false);
+  const [loadingTransaction, setLoadingTransaction] = useState(false);
 
-  // Afficher un message avec son type
+  // Afficher un message
   function afficherMessage(texte, type = "info") {
     setMessage(texte);
     setMessageType(type);
   }
 
-  // Sauvegarder automatiquement les diplômes
+  // Sauvegarder les diplômes dans localStorage
   useEffect(() => {
     localStorage.setItem("diplomas", JSON.stringify(diplomas));
   }, [diplomas]);
 
-  // Modifier les champs du formulaire
+  // Modifier les champs
   function handleChange(e) {
-    setFormData({
-      ...formData,
+    setFormData((previous) => ({
+      ...previous,
       [e.target.name]: e.target.value,
-    });
+    }));
+  }
+
+  // Vérifier le compte propriétaire et préparer le contrat
+  async function connecterProprietaire() {
+    const { signer, provider, adresse } = await connecterWallet();
+
+    await verifierReseauSepolia(provider);
+
+    const contrat = obtenirContrat(signer);
+
+    const owner = await contrat.owner();
+
+    if (owner.toLowerCase() !== OWNER_ADDRESS.toLowerCase()) {
+      throw new Error(
+        "Le propriétaire du Smart Contract ne correspond pas à l'adresse attendue."
+      );
+    }
+
+    if (adresse.toLowerCase() !== owner.toLowerCase()) {
+      throw new Error(
+        "Veuillez sélectionner le compte MetaMask propriétaire du Smart Contract : " +
+          owner
+      );
+    }
+
+    return { contrat, signer };
   }
 
   // Sélectionner un PDF et calculer son hash
@@ -60,6 +105,7 @@ function Admin() {
 
     try {
       setLoadingHash(true);
+
       afficherMessage("Calcul du hash SHA-256 en cours...", "info");
 
       const hash = await calculerHash(file);
@@ -107,18 +153,42 @@ function Admin() {
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (loadingHash) {
+    if (loadingHash || loadingTransaction) {
       afficherMessage(
-        "Veuillez attendre la fin du calcul du hash.",
+        "Veuillez attendre la fin de l'opération.",
         "warning"
       );
       return;
     }
 
+    const cleanedData = {
+      ...formData,
+      studentName: formData.studentName.trim(),
+      diplomaNumber: formData.diplomaNumber.trim(),
+      specialty: formData.specialty.trim(),
+      institution: formData.institution.trim(),
+    };
+
+    // Vérifier les champs
+    if (
+      !cleanedData.studentName ||
+      !cleanedData.diplomaNumber ||
+      !cleanedData.specialty ||
+      !cleanedData.institution ||
+      !cleanedData.issueDate
+    ) {
+      afficherMessage(
+        "Veuillez remplir tous les champs obligatoires.",
+        "error"
+      );
+      return;
+    }
+
+    // Vérifier les doublons
     const duplicate = diplomas.some(
       (d) =>
         d.diplomaNumber?.toLowerCase() ===
-          formData.diplomaNumber.trim().toLowerCase() &&
+          cleanedData.diplomaNumber.toLowerCase() &&
         d.id !== editingId
     );
 
@@ -130,8 +200,48 @@ function Admin() {
       return;
     }
 
-    // PDF obligatoire pour un nouvel ajout
-    if (editingId === null && !pdfFile) {
+    // MODIFICATION : les informations locales changent,
+    // mais le hash déjà enregistré sur la blockchain reste identique.
+    if (editingId !== null) {
+      const oldDiploma = diplomas.find(
+        (d) => d.id === editingId
+      );
+
+      if (!oldDiploma) {
+        afficherMessage("Diplôme introuvable.", "error");
+        return;
+      }
+
+      if (pdfFile) {
+        afficherMessage(
+          "Le PDF ne peut pas être remplacé après son enregistrement sur la blockchain. Le hash original doit être conservé.",
+          "warning"
+        );
+        return;
+      }
+
+      setDiplomas((previous) =>
+        previous.map((d) =>
+          d.id === editingId
+            ? {
+                ...d,
+                ...cleanedData,
+              }
+            : d
+        )
+      );
+
+      afficherMessage(
+        "Informations du diplôme modifiées. Le hash blockchain est conservé.",
+        "success"
+      );
+
+      resetForm();
+      return;
+    }
+
+    // NOUVEL AJOUT : PDF obligatoire
+    if (!pdfFile || !pdfHash) {
       afficherMessage(
         "Veuillez sélectionner le fichier PDF du diplôme.",
         "error"
@@ -140,73 +250,88 @@ function Admin() {
     }
 
     try {
-      const oldDiploma = diplomas.find(
-        (d) => d.id === editingId
+      setLoadingTransaction(true);
+
+      afficherMessage(
+        "Connexion à MetaMask et vérification du propriétaire...",
+        "info"
       );
 
-      const cleanedData = {
-        ...formData,
-        studentName: formData.studentName.trim(),
-        diplomaNumber: formData.diplomaNumber.trim(),
-        specialty: formData.specialty.trim(),
-        institution: formData.institution.trim(),
+      const { contrat } = await connecterProprietaire();
 
-        pdfHash: pdfFile
-          ? pdfHash
-          : oldDiploma?.pdfHash || "",
+      // Vérifier si le hash existe déjà sur la blockchain
+      const verification = await contrat.verifierDiplome(pdfHash);
 
-        pdfName: pdfFile
-          ? pdfFile.name
-          : oldDiploma?.pdfName || "",
-      };
-
-      if (editingId !== null) {
-        setDiplomas((previous) =>
-          previous.map((d) =>
-            d.id === editingId
-              ? { ...d, ...cleanedData }
-              : d
-          )
-        );
-
-        afficherMessage(
-          "Diplôme modifié avec succès.",
-          "success"
-        );
-      } else {
-        setDiplomas((previous) => [
-          ...previous,
-          {
-            id: Date.now(),
-            ...cleanedData,
-            revoked: false,
-          },
-        ]);
-
-        afficherMessage(
-          "Diplôme ajouté avec succès.",
-          "success"
+      if (verification.existe) {
+        throw new Error(
+          "Ce PDF est déjà enregistré sur la blockchain."
         );
       }
 
-      setFormData({
-        studentName: "",
-        diplomaNumber: "",
-        specialty: "",
-        institution: "",
-        issueDate: "",
-      });
+      afficherMessage(
+        "Veuillez confirmer la transaction dans MetaMask...",
+        "info"
+      );
 
-      setEditingId(null);
-      setPdfFile(null);
-      setPdfHash("");
-    } catch (error) {
-      console.error(error);
+      // Le CID est vide pour le moment : IPFS n'est pas encore intégré.
+      const cid = "";
+
+      // Enregistrer le diplôme sur la blockchain
+      const transaction = await contrat.emettreDiplome(
+        pdfHash,
+        cleanedData.studentName,
+        cid
+      );
 
       afficherMessage(
-        "Une erreur est survenue lors de l'enregistrement du diplôme.",
+        "Transaction envoyée. Attente de confirmation sur Sepolia...",
+        "info"
+      );
+
+      const receipt = await transaction.wait();
+
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(
+          "La transaction blockchain a échoué."
+        );
+      }
+
+      // Enregistrer aussi les informations complémentaires localement
+      const newDiploma = {
+        id: Date.now(),
+        ...cleanedData,
+        pdfHash,
+        pdfName: pdfFile.name,
+        revoked: false,
+        blockchainTxHash: transaction.hash,
+        blockchainAddress: CONTRACT_ADDRESS,
+      };
+
+      setDiplomas((previous) => [
+        ...previous,
+        newDiploma,
+      ]);
+
+      afficherMessage(
+        "Diplôme enregistré avec succès sur Ethereum Sepolia !",
+        "success"
+      );
+
+      resetForm();
+
+      setActiveSection("list");
+    } catch (error) {
+      console.error("Erreur d'enregistrement :", error);
+
+      afficherMessage(
+        error.reason ||
+          error.shortMessage ||
+          error.message ||
+          "Une erreur est survenue pendant l'enregistrement.",
         "error"
       );
+    } finally {
+      setLoadingTransaction(false);
     }
   }
 
@@ -242,10 +367,10 @@ function Admin() {
     });
   }
 
-  // Supprimer un diplôme
+  // Supprimer de la liste locale
   function handleDelete(id) {
     const confirmed = window.confirm(
-      "Voulez-vous vraiment supprimer ce diplôme ?"
+      "Voulez-vous vraiment supprimer ce diplôme de la liste locale ? Attention : cette action ne supprime pas son enregistrement sur la blockchain."
     );
 
     if (!confirmed) {
@@ -262,21 +387,27 @@ function Admin() {
     }
 
     afficherMessage(
-      "Diplôme supprimé avec succès.",
+      "Diplôme supprimé de la liste locale. Son enregistrement blockchain reste permanent.",
       "success"
     );
   }
 
-  // Révoquer un diplôme
-  function handleRevoke(id) {
+  // Révoquer un diplôme sur la blockchain
+  async function handleRevoke(id) {
     const diploma = diplomas.find((d) => d.id === id);
 
-    if (!diploma || diploma.revoked) {
+    if (!diploma || diploma.revoked) return;
+
+    if (!diploma.pdfHash) {
+      afficherMessage(
+        "Ce diplôme ne possède pas de hash.",
+        "error"
+      );
       return;
     }
 
     const confirmed = window.confirm(
-      "Voulez-vous vraiment révoquer ce diplôme ?"
+      "Voulez-vous vraiment révoquer ce diplôme sur la blockchain ?"
     );
 
     if (!confirmed) {
@@ -284,18 +415,83 @@ function Admin() {
       return;
     }
 
-    setDiplomas((previous) =>
-      previous.map((d) =>
-        d.id === id
-          ? { ...d, revoked: true }
-          : d
-      )
-    );
+    try {
+      setLoadingTransaction(true);
 
-    afficherMessage(
-      "Diplôme révoqué avec succès.",
-      "success"
-    );
+      afficherMessage(
+        "Vérification du compte propriétaire...",
+        "info"
+      );
+
+      const { contrat } = await connecterProprietaire();
+
+      const verification = await contrat.verifierDiplome(
+        diploma.pdfHash
+      );
+
+      if (!verification.existe) {
+        throw new Error(
+          "Ce diplôme n'existe pas sur la blockchain. Il est peut-être uniquement enregistré dans localStorage."
+        );
+      }
+
+      if (!verification.valide) {
+        throw new Error(
+          "Ce diplôme est déjà révoqué sur la blockchain."
+        );
+      }
+
+      afficherMessage(
+        "Veuillez confirmer la révocation dans MetaMask...",
+        "info"
+      );
+
+      const transaction = await contrat.revoquerDiplome(
+        diploma.pdfHash
+      );
+
+      afficherMessage(
+        "Révocation envoyée. Attente de confirmation...",
+        "info"
+      );
+
+      const receipt = await transaction.wait();
+
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(
+          "La transaction de révocation a échoué."
+        );
+      }
+
+      setDiplomas((previous) =>
+        previous.map((d) =>
+          d.id === id
+            ? {
+                ...d,
+                revoked: true,
+                revokeTxHash: transaction.hash,
+              }
+            : d
+        )
+      );
+
+      afficherMessage(
+        "Diplôme révoqué avec succès sur la blockchain !",
+        "success"
+      );
+    } catch (error) {
+      console.error("Erreur de révocation :", error);
+
+      afficherMessage(
+        error.reason ||
+          error.shortMessage ||
+          error.message ||
+          "Erreur pendant la révocation.",
+        "error"
+      );
+    } finally {
+      setLoadingTransaction(false);
+    }
   }
 
   const validDiplomas = diplomas.filter(
@@ -469,6 +665,7 @@ function Admin() {
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onRevoke={handleRevoke}
+                  disabled={loadingTransaction}
                 />
               )}
             </section>
@@ -554,16 +751,16 @@ function Admin() {
                   type="file"
                   accept=".pdf,application/pdf"
                   onChange={handleFileChange}
+                  disabled={editingId !== null || loadingTransaction}
                 />
 
                 {pdfFile && (
                   <p>📄 Fichier sélectionné : {pdfFile.name}</p>
                 )}
 
-                {editingId !== null && !pdfFile && (
+                {editingId !== null && (
                   <p>
-                    Aucun nouveau fichier sélectionné.
-                    L'ancien hash sera conservé.
+                    Le PDF et son hash blockchain original sont conservés.
                   </p>
                 )}
               </div>
@@ -588,11 +785,13 @@ function Admin() {
                 <button
                   type="submit"
                   className="primary-button"
-                  disabled={loadingHash}
+                  disabled={loadingHash || loadingTransaction}
                 >
-                  {editingId !== null
-                    ? "Enregistrer les modifications"
-                    : "+ Ajouter le diplôme"}
+                  {loadingTransaction
+                    ? "Transaction en cours..."
+                    : editingId !== null
+                      ? "Enregistrer les modifications"
+                      : "+ Ajouter le diplôme sur la blockchain"}
                 </button>
 
                 {editingId !== null && (
@@ -600,6 +799,7 @@ function Admin() {
                     type="button"
                     className="secondary-button"
                     onClick={resetForm}
+                    disabled={loadingTransaction}
                   >
                     Annuler
                   </button>
@@ -647,6 +847,7 @@ function Admin() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onRevoke={handleRevoke}
+                disabled={loadingTransaction}
               />
             )}
           </section>
@@ -668,6 +869,7 @@ function DiplomaTable({
   onEdit,
   onDelete,
   onRevoke,
+  disabled,
 }) {
   return (
     <div className="table-wrapper">
@@ -721,6 +923,7 @@ function DiplomaTable({
                         className="edit-button"
                         onClick={() => onEdit(diploma)}
                         title="Modifier"
+                        disabled={disabled}
                       >
                         ✎
                       </button>
@@ -729,6 +932,7 @@ function DiplomaTable({
                         className="revoke-button"
                         onClick={() => onRevoke(diploma.id)}
                         title="Révoquer le diplôme"
+                        disabled={disabled}
                       >
                         Révoquer
                       </button>
@@ -738,7 +942,8 @@ function DiplomaTable({
                   <button
                     className="delete-button"
                     onClick={() => onDelete(diploma.id)}
-                    title="Supprimer"
+                    title="Supprimer de la liste locale"
+                    disabled={disabled}
                   >
                     ×
                   </button>
